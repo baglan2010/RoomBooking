@@ -1,0 +1,77 @@
+@page "/my-bookings"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using RoomBooking.Data
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Мои брони</PageTitle>
+
+<h1>Мои брони</h1>
+
+@if (bookings is null)
+{
+    <p>Загрузка...</p>
+}
+else if (bookings.Count == 0)
+{
+    <p>Броней пока нет.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Комната</th>
+                <th>Название</th>
+                <th>Начало</th>
+                <th>Конец</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var b in bookings)
+            {
+                <tr>
+                    <td>@b.Room?.Name</td>
+                    <td>@b.Title</td>
+                    <td>@b.Start.ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>@b.End.ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Cancel(b)">Отменить</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Booking>? bookings;
+    private string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        bookings = await Db.Bookings
+            .Include(b => b.Room)
+            .Where(b => b.UserId == userId)
+            .OrderBy(b => b.Start)
+            .ToListAsync();
+    }
+
+    private async Task Cancel(Booking booking)
+    {
+        Db.Bookings.Remove(booking);
+        await Db.SaveChangesAsync();
+        await Load();
+    }
+}

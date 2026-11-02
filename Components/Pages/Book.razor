@@ -1,0 +1,139 @@
+@page "/book/{RoomId:int}"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using RoomBooking.Data
+@inject ApplicationDbContext Db
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>Бронирование</PageTitle>
+
+@if (room is null)
+{
+    <p>Загрузка...</p>
+}
+else
+{
+    <h1>@room.Name</h1>
+    <p class="text-muted">@room.Description, мест: @room.Capacity</p>
+
+    <EditForm Model="form" OnValidSubmit="Save" FormName="bookingForm">
+        <div class="mb-3">
+            <label class="form-label">Название брони</label>
+            <InputText class="form-control" @bind-Value="form.Title" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Начало</label>
+            <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="form.Start" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Конец</label>
+            <InputDate class="form-control" Type="InputDateType.DateTimeLocal" @bind-Value="form.End" />
+        </div>
+
+        @if (error is not null)
+        {
+            <div class="alert alert-danger">@error</div>
+        }
+
+        <button type="submit" class="btn btn-primary">Забронировать</button>
+        <a class="btn btn-secondary" href="rooms">Назад</a>
+    </EditForm>
+
+    <h4 class="mt-4">Уже занято</h4>
+    @if (upcoming.Count == 0)
+    {
+        <p>Пока свободно.</p>
+    }
+    else
+    {
+        <ul>
+            @foreach (var b in upcoming)
+            {
+                <li>@b.Start.ToString("dd.MM HH:mm") - @b.End.ToString("dd.MM HH:mm"), @b.Title</li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    [Parameter] public int RoomId { get; set; }
+
+    private Room? room;
+    private List<Booking> upcoming = new();
+    private BookingForm form = new();
+    private string? error;
+    private string userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        room = await Db.Rooms.FindAsync(RoomId);
+
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        userId = state.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+
+        var start = DateTime.Now.AddMinutes(60 - DateTime.Now.Minute);
+        form.Start = new DateTime(start.Year, start.Month, start.Day, start.Hour, 0, 0);
+        form.End = form.Start.AddHours(1);
+
+        await LoadUpcoming();
+    }
+
+    private async Task LoadUpcoming()
+    {
+        upcoming = await Db.Bookings
+            .Where(b => b.RoomId == RoomId && b.End > DateTime.Now)
+            .OrderBy(b => b.Start)
+            .ToListAsync();
+    }
+
+    private async Task Save()
+    {
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(form.Title))
+        {
+            error = "Введи название брони.";
+            return;
+        }
+        if (form.End <= form.Start)
+        {
+            error = "Конец должен быть позже начала.";
+            return;
+        }
+        if (form.Start < DateTime.Now)
+        {
+            error = "Нельзя бронировать в прошлом.";
+            return;
+        }
+
+        var busy = await Db.Bookings.AnyAsync(b =>
+            b.RoomId == RoomId && b.Start < form.End && b.End > form.Start);
+        if (busy)
+        {
+            error = "На это время комната уже занята.";
+            return;
+        }
+
+        Db.Bookings.Add(new Booking
+        {
+            RoomId = RoomId,
+            UserId = userId,
+            Title = form.Title,
+            Start = form.Start,
+            End = form.End
+        });
+        await Db.SaveChangesAsync();
+        await LoadUpcoming();
+        form = new BookingForm { Start = form.End, End = form.End.AddHours(1) };
+    }
+
+    private class BookingForm
+    {
+        public string Title { get; set; } = "";
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+    }
+}

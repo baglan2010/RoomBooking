@@ -1,0 +1,40 @@
+@page "/rooms"
+@using Microsoft.EntityFrameworkCore
+@using RoomBooking.Data
+@inject ApplicationDbContext Db
+
+<PageTitle>Комнаты</PageTitle>
+
+<h1>Комнаты</h1>
+
+@if (rooms is null)
+{
+    <p>Загрузка...</p>
+}
+else
+{
+    <div class="row">
+        @foreach (var room in rooms)
+        {
+            <div class="col-md-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">@room.Name</h5>
+                        <p class="card-text">@room.Description</p>
+                        <p class="text-muted">Мест: @room.Capacity</p>
+                        <a class="btn btn-primary" href="book/@room.Id">Забронировать</a>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Room>? rooms;
+
+    protected override async Task OnInitializedAsync()
+    {
+        rooms = await Db.Rooms.ToListAsync();
+    }
+}

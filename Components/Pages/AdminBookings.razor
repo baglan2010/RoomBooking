@@ -1,0 +1,75 @@
+@page "/admin/bookings"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using RoomBooking.Data
+@inject ApplicationDbContext Db
+
+<PageTitle>Все брони</PageTitle>
+
+<h1>Все брони</h1>
+
+@if (bookings is null)
+{
+    <p>Загрузка...</p>
+}
+else if (bookings.Count == 0)
+{
+    <p>Броней пока нет.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Комната</th>
+                <th>Кто</th>
+                <th>Название</th>
+                <th>Начало</th>
+                <th>Конец</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var b in bookings)
+            {
+                <tr>
+                    <td>@b.Room?.Name</td>
+                    <td>@(emails.TryGetValue(b.UserId, out var mail) ? mail : "-")</td>
+                    <td>@b.Title</td>
+                    <td>@b.Start.ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>@b.End.ToString("dd.MM.yyyy HH:mm")</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Cancel(b)">Отменить</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Booking>? bookings;
+    private Dictionary<string, string> emails = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        bookings = await Db.Bookings.Include(b => b.Room).OrderBy(b => b.Start).ToListAsync();
+        var ids = bookings.Select(b => b.UserId).Distinct().ToList();
+        emails = await Db.Users
+            .Where(u => ids.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, u => u.Email ?? "");
+    }
+
+    private async Task Cancel(Booking booking)
+    {
+        Db.Bookings.Remove(booking);
+        await Db.SaveChangesAsync();
+        await Load();
+    }
+}

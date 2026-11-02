@@ -1,0 +1,100 @@
+@page "/admin/rooms"
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using RoomBooking.Data
+@inject ApplicationDbContext Db
+
+<PageTitle>Управление комнатами</PageTitle>
+
+<h1>Управление комнатами</h1>
+
+<EditForm Model="newRoom" OnValidSubmit="Add" FormName="addRoom" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <InputText class="form-control" placeholder="Название" @bind-Value="newRoom.Name" />
+    </div>
+    <div class="col-md-2">
+        <InputNumber class="form-control" @bind-Value="newRoom.Capacity" />
+    </div>
+    <div class="col-md-4">
+        <InputText class="form-control" placeholder="Описание" @bind-Value="newRoom.Description" />
+    </div>
+    <div class="col-md-2">
+        <button type="submit" class="btn btn-primary">Добавить</button>
+    </div>
+</EditForm>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (rooms is not null)
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Название</th>
+                <th>Мест</th>
+                <th>Описание</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var r in rooms)
+            {
+                <tr>
+                    <td>@r.Name</td>
+                    <td>@r.Capacity</td>
+                    <td>@r.Description</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => Delete(r)">Удалить</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Room>? rooms;
+    private Room newRoom = new() { Capacity = 4 };
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        rooms = await Db.Rooms.OrderBy(r => r.Id).ToListAsync();
+    }
+
+    private async Task Add()
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(newRoom.Name))
+        {
+            error = "Введи название комнаты.";
+            return;
+        }
+        if (newRoom.Capacity < 1)
+        {
+            error = "Вместимость должна быть больше нуля.";
+            return;
+        }
+
+        Db.Rooms.Add(newRoom);
+        await Db.SaveChangesAsync();
+        newRoom = new Room { Capacity = 4 };
+        await Load();
+    }
+
+    private async Task Delete(Room room)
+    {
+        Db.Rooms.Remove(room);
+        await Db.SaveChangesAsync();
+        await Load();
+    }
+}
